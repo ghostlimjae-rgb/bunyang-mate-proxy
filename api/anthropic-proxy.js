@@ -1,34 +1,29 @@
-// 파일 경로: api/anthropic-proxy.js
-// 이 파일 하나만 있으면 Vercel이 자동으로 /api/anthropic-proxy 엔드포인트로 인식합니다.
+// 파일 경로: api/anthropic-proxy.js (Vercel 프로젝트 루트의 api 폴더 안에 위치)
+// Node.js 서버리스 함수 형식 (req, res)
 
-export const runtime = 'edge';
-export const preferredRegion = ['hnd1', 'icn1', 'sin1'];
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key, anthropic-version');
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-key, anthropic-version',
-};
-
-export default async function handler(request) {
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
   }
 
-  if (request.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
   }
 
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured on Vercel' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on Vercel' });
+      return;
     }
 
-    const body = await request.text();
+    const body = JSON.stringify(req.body);
 
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -41,26 +36,26 @@ export default async function handler(request) {
     });
 
     const contentType = anthropicRes.headers.get('content-type') || '';
+
     if (contentType.includes('text/event-stream')) {
-      return new Response(anthropicRes.body, {
-        status: anthropicRes.status,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-        },
-      });
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      const reader = anthropicRes.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value));
+      }
+      res.end();
+      return;
     }
 
     const text = await anthropicRes.text();
-    return new Response(text, {
-      status: anthropicRes.status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    res.status(anthropicRes.status);
+    res.setHeader('Content-Type', 'application/json');
+    res.send(text);
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    res.status(500).json({ error: err.message });
   }
 }
