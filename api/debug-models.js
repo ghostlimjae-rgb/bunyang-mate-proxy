@@ -1,16 +1,11 @@
 // 파일 경로: api/debug-models.js
-// 배포 후 https://[your-project].vercel.app/api/debug-models 로 접속해서 테스트
+// Node.js 서버리스 함수 형식 (req, res)
 
-export const runtime = 'edge';
-export const preferredRegion = ['hnd1', 'icn1', 'sin1'];
-
-export default async function handler(request) {
+export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+    return;
   }
 
   const models = ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
@@ -18,7 +13,7 @@ export default async function handler(request) {
 
   for (const model of models) {
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -27,15 +22,15 @@ export default async function handler(request) {
         },
         body: JSON.stringify({ model, max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }),
       });
-      const text = await res.text();
-      const cfRay = res.headers.get('cf-ray') || 'none';
-      results.push(`[${model}] HTTP ${res.status} (cf-ray:${cfRay}): ${text.slice(0, 150)}`);
+      const text = await apiRes.text();
+      const cfRay = apiRes.headers.get('cf-ray') || 'none';
+      results.push(`[${model}] HTTP ${apiRes.status} (cf-ray:${cfRay}): ${text.slice(0, 150)}`);
     } catch (e) {
       results.push(`[${model}] ERROR: ${e.message}`);
     }
   }
 
-  return new Response(results.join('\n\n'), {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
-  });
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.status(200).send(results.join('\n\n'));
 }
