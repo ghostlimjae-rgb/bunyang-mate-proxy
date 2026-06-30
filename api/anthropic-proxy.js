@@ -1,10 +1,7 @@
-// 파일 경로: api/anthropic-proxy.js (Vercel 프로젝트 루트의 api 폴더 안에 위치)
+// 파일 경로: api/anthropic-proxy.js
 // 이 파일 하나만 있으면 Vercel이 자동으로 /api/anthropic-proxy 엔드포인트로 인식합니다.
 
 export const runtime = 'edge';
-
-// 홍콩(hkg1)을 피하고 한국에 가까운 리전으로 고정
-// 도쿄(hnd1), 서울 인접 리전이 없어 도쿄가 가장 가깝습니다.
 export const preferredRegion = ['hnd1', 'icn1', 'sin1'];
 
 const corsHeaders = {
@@ -43,7 +40,6 @@ export default async function handler(request) {
       body,
     });
 
-    // 스트리밍 응답인지 확인
     const contentType = anthropicRes.headers.get('content-type') || '';
     if (contentType.includes('text/event-stream')) {
       return new Response(anthropicRes.body, {
